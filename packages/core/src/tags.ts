@@ -1,0 +1,63 @@
+export const TAG = {
+  privateKeys: "jelly/private-keys@1",
+  privateData: "jelly/private-data@1",
+  pgpKeys: "jelly/pgp-keys@1",
+  akWrap: "jelly/ak-wrap@1",
+  nodeMeta: "jelly/node-meta@1",
+  childKey: "jelly/child-key@1",
+  linkNodeKey: "jelly/link-node-key@1",
+  linkSecret: "jelly/link-secret@1",
+  teamSigner: "jelly/team-signer@1",
+  groupKey: "jelly/group-key@1",
+  teamMeta: "jelly/team-meta@1",
+  groupMeta: "jelly/group-meta@1",
+  chatEntry: "jelly/chat-entry@1",
+  chatKeyHistory: "jelly/chat-key-history@1",
+  chatAwareness: "jelly/chat-awareness@1",
+  /** The device's chat search index (sealed with the device key, never leaves the device). */
+  chatSearch: "jelly/chat-search@1",
+  /** The device's task search index per workspace (sealed with the device key, never leaves the device). */
+  tasksSearch: "jelly/tasks-search@1",
+  /** The device's contacts search index per workspace (sealed with the device key, never leaves the device). */
+  contactsSearch: "jelly/contacts-search@1",
+  /** The device's spreadsheet search index per workspace (sealed with the device key, never leaves the device). */
+  sheetsSearch: "jelly/sheets-search@1",
+  /** A call epoch's media key, sealed under the call space's node key. */
+  callKey: "jelly/call-key@1",
+  /** In-call state (hands, reactions, mute requests, side chat, hellos) on the data channel, under the call key. */
+  callSignal: "jelly/call-signal@1",
+} as const;
+
+export const SIG = {
+  identityEncKey: "identity-enc-key",
+  /** Legacy grant format ('|'-joined); still verified for grants made before grant@2. */
+  grant: "grant",
+  grantV2: "grant@2",
+  /** Membership statement: who vouched for a person (and their signing key) at a role on a node. */
+  member: "member@1",
+  teamKey: "team-key@1",
+  groupKey: "group-key@1",
+  groupMember: "group-member@1",
+  groupGrant: "group-grant@1",
+  teamInvite: "team-invite@1",
+  inviteAccept: "invite-accept@1",
+  chatEntry: "chat-entry@1",
+  /** A call participant's statement of who they are and which tracks are theirs. */
+  callHello: "call-hello@1",
+  /** One in-call signal, signed with the per-join key its sender's hello announced. */
+  callSignal: "call-signal@1",
+} as const;
+
+export const KDF = {
+  passwordWrap: "jelly/password-wrap",
+  recoveryWrap: "jelly/recovery-wrap",
+  recoveryAuth: "jelly/recovery-auth",
+  linkAuth: "jelly/link-auth",
+  linkWrap: "jelly/link-wrap",
+  inviteKey: "jelly/invite-key",
+  inviteSign: "jelly/invite-sign",
+  inviteAuth: "jelly/invite-auth",
+  teamMeta: "jelly/team-meta",
+  /** Keys the tags of addresses kept in private settings (dismissed contact suggestions). */
+  contactSuggestions: "jelly/contact-suggestions",
+} as const;
