@@ -32,6 +32,10 @@ describe("handles", () => {
   it("rejects reserved handles", () => {
     expect(validateHandle("admin")).toEqual({ ok: false, reason: "reserved" });
     expect(validateHandle("postmaster")).toEqual({ ok: false, reason: "reserved" });
+    // Company addresses and names that could pass for us in a phishing mail.
+    for (const h of ["hello", "hey", "welcome", "news", "contact", "press", "careers", "verify", "official"]) {
+      expect(validateHandle(h)).toEqual({ ok: false, reason: "reserved" });
+    }
   });
 
   it("normalizes case and whitespace", () => {
