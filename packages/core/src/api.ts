@@ -123,13 +123,31 @@ export type CreateLinkReq = {
   keyVersion: number;
   wrappedNodeKey: B64;
   wrappedSecret: B64;
+  /** ISO time, at most a year ahead. Omitted or null: never expires. */
+  expiresAt?: string | null;
 };
+export type LinkStatus = "live" | "paused" | "blocked" | "expired";
 export type LinkInfo = {
   id: string;
   role: "viewer" | "editor";
   keyVersion: number;
   wrappedSecret: B64;
   createdAt: string;
+  /** Null: never expires. */
+  expiresAt: string | null;
+  status: LinkStatus;
+  /** Why it's paused or blocked, as the owner should read it. */
+  statusReason?: string;
+};
+export type AbuseReason = "csam" | "terrorism" | "illegal" | "copyright" | "malware" | "harassment" | "other";
+/** A reviewer's public key; reports are sealed to each so the server can't read them. */
+export type ReviewerKey = { userId: string; encPub: B64 };
+export type ReportReq = {
+  linkId: string;
+  reason: AbuseReason;
+  /** Optional, so we can tell the reporter what we did. */
+  contact?: string;
+  sealed: { userId: string; box: B64 }[];
 };
 export type OpenLinkReq = { auth: B64 };
 export type OpenLinkRes = {
