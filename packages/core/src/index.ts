@@ -7,6 +7,7 @@ export * from "./handles.ts";
 export * from "./links.ts";
 export * from "./nodes.ts";
 export * from "./pins.ts";
+export type * from "./reader.ts";
 export * from "./recovery.ts";
 export * from "./resolver.ts";
 export { SIG, TAG } from "./tags.ts";

@@ -1,3 +1,5 @@
+export type { FinalToken as AnonFinalToken, Token as AnonToken } from "./anon-token.ts";
+export * as anonToken from "./anon-token.ts";
 export {
   encryptionKeyPairFromSeed,
   encryptionPublicFromPrivate,

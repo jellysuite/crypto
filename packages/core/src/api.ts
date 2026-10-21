@@ -79,6 +79,10 @@ export type WorkspaceInfo = {
   contactsBookId: string | null;
   /** Jelly Video's Meetings system folder at the root, once set up (apps hide it outside Video). */
   meetingsFolderId: string | null;
+  /** Jelly Reader's system folder at the root, once set up (apps hide it outside Reader). */
+  readerFolderId: string | null;
+  /** Saved, the collection in the Reader folder (personal workspaces, once set up). */
+  readerSavedId: string | null;
 };
 export type TreeRes = {
   rootId: string;
@@ -209,6 +213,10 @@ export type TeamInfo = {
   contactsBookId: string | null;
   /** Jelly Video's Meetings system folder in the team root, once set up (apps hide it outside Video). */
   meetingsFolderId: string | null;
+  /** Jelly Reader's system folder in the team root, once set up (apps hide it outside Reader). */
+  readerFolderId: string | null;
+  /** Always null: a team workspace has no Saved (kept to match WorkspaceInfo). */
+  readerSavedId: string | null;
   plan: string;
   role: TeamRole;
   status: TeamStatus;
@@ -489,6 +497,43 @@ export type TasksSetupReq = { folder: CreateNodeReq; inbox?: CreateNodeReq };
 /** `inboxId` is null in a team workspace (no Inbox there). */
 export type TasksSetupRes = { tasksFolderId: string; inboxId: string | null };
 
+// ---- Reader ----
+
+/**
+ * Sets up the workspace's Reader folder (at the root) and, in a personal workspace, Saved (kind `reader-collection`,
+ * linked in the folder).
+ */
+export type ReaderSetupReq = { folder: CreateNodeReq; saved?: CreateNodeReq };
+/** `savedId` is null in a team workspace (no Saved there). */
+export type ReaderSetupRes = { readerFolderId: string; savedId: string | null };
+/**
+ * One of a person's items as the item store returns it; `envelope` is sealed (base64url). Which feed it's from is
+ * only inside the envelope.
+ */
+export type ReaderItemWire = {
+  id: string;
+  seq: number;
+  unread: boolean;
+  starred: boolean;
+  envelope: string;
+  createdAt: string;
+};
+export type ReaderItemsRes = { items: ReaderItemWire[]; next: number | null };
+export type ReaderPutReq = { items: Array<{ id: string; envelope: string }> };
+export type ReaderPutRes = { seq: number };
+/** Exactly one selector: `ids` (at most 500) or `createdUpTo` (ISO, compared with the items' creation time). */
+export type ReaderPatchReq = {
+  ids?: string[];
+  createdUpTo?: string;
+  unread?: boolean;
+  starred?: boolean;
+};
+/** Rows whose flags changed. */
+export type ReaderPatchRes = { updated: number };
+export type ReaderDeleteRes = { deleted: number };
+/** Exactly one selector: `ids` (at most 500) or `unstarredBefore` (ISO, by creation time). */
+export type ReaderDeleteReq = { ids?: string[]; unstarredBefore?: string };
+
 // ---- Contacts ----
 
 /**
@@ -599,3 +644,20 @@ export type BillingAccountInfo = {
 export type BillingRes = { entitled: boolean; accounts: BillingAccountInfo[] };
 export type PortalReq = { accountId: string };
 export type PortalRes = { url: string };
+
+/** A disposable receiving address (<label>.<random>@<mail domain>) delivering into the owner's mailbox. */
+export type MailAliasWire = {
+  id: string;
+  address: string;
+  state: "enabled" | "disabled";
+  newsletter: boolean;
+  createdAt: string;
+};
+/** The address a label would get, with a short-lived token to create exactly that alias. */
+export type AliasPreviewRes = { address: string; token: string };
+
+/** Jelly Reader: a batch of blinded anonymous tokens (base64url, at most 100) for the current epoch. */
+export type ReaderTokensReq = { epoch: number; blinded: string[] };
+/** The evaluated batch with its proof, and how many tokens today's allowance still covers. */
+export type ReaderTokensRes = { epoch: number; evaluated: string[]; proof: string; remaining: number };
+export type ReaderAllowanceRes = { remaining: number; epoch: number };

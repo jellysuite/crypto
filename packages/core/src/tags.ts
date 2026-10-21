@@ -26,6 +26,14 @@ export const TAG = {
   callKey: "jelly/call-key@1",
   /** In-call state (hands, reactions, mute requests, side chat, hellos) on the data channel, under the call key. */
   callSignal: "jelly/call-signal@1",
+  /** One Jelly Reader item, sealed with the reader key; the AD binds user, item id and key version. */
+  readerItem: "jelly/reader-item@1",
+  /** The device's Reader search index (sealed with the device key, never leaves the device). */
+  readerSearch: "jelly/reader-search@1",
+  /** The device's Reader token wallet (sealed with the device key, never leaves the device). */
+  readerWallet: "jelly/reader-wallet@1",
+  /** The device's Reader refresh state: feeds' ETags and timing, known item ids (sealed with the device key). */
+  readerRefresh: "jelly/reader-refresh@1",
 } as const;
 
 export const SIG = {
