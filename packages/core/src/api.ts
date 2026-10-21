@@ -660,6 +660,24 @@ export type BillingRes = { entitled: boolean; accounts: BillingAccountInfo[] };
 export type PortalReq = { accountId: string };
 export type PortalRes = { url: string };
 
+// Push: server-sent reminders (docs/superpowers/specs/2026-10-21-push-design.md §4).
+
+export type PushEnvironment = "production" | "sandbox";
+/** `GET /push/config`: whether this server sends pushes (APNs configured). */
+export type PushConfigRes = { enabled: boolean };
+/** One of the account's push devices (`GET /push/devices`); tokens are never returned. */
+export type PushDeviceWire = { id: string; publicKey: string; createdAt: string };
+/** `POST /push/devices`: the APNs device token (hex), and the install's X25519 push public key (base64url). */
+export type AddPushDeviceReq = { token: string; environment: PushEnvironment; publicKey: string };
+export type AddPushDeviceRes = { id: string };
+/** A reminder at `at` (ISO): `sealed` maps a push device id to the text sealed to it (base64url). */
+export type PushReminderWire = { key: string; at: string; sealed: Record<string, string> };
+/**
+ * `PUT /push/reminders/:sourceId`: replaces all of the caller's reminders for the source. `version` is an event's
+ * `updatedAt` as received, or a task project's highest applied update seq (a decimal string).
+ */
+export type PutPushRemindersReq = { version: string; reminders: PushReminderWire[] };
+
 /** A disposable receiving address (<label>.<random>@<mail domain>) delivering into the owner's mailbox. */
 export type MailAliasWire = {
   id: string;
