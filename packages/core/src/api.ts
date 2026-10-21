@@ -59,6 +59,21 @@ export type SessionInfo = {
   lastSeenAt: string;
   current: boolean;
 };
+/**
+ * Whether the account may be deleted (`GET /account/deletion`), or what stops it: owning a team, being managed by
+ * one (with its admins' handles), or a hold. Team names are encrypted: the client names the team by its id.
+ */
+export type AccountDeletionStatus =
+  | { ok: true }
+  | {
+      ok: false;
+      code: "team_owner" | "managed" | "account_on_hold";
+      team?: { id: string };
+      admins?: string[];
+    };
+export type DeleteAccountReq = { handle: string };
+/** Cents refunded for the unused part of a plan (0 when there was nothing to refund). */
+export type DeleteAccountRes = { refunded: number };
 export type PrivateDataReq = { privateData: B64; revision: number };
 export type HandleAvailableRes = { available: boolean; reason?: "format" | "reserved" | "taken" };
 
