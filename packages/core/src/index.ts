@@ -9,6 +9,7 @@ export * from "./nodes.ts";
 export * from "./pins.ts";
 export type * from "./reader.ts";
 export * from "./recovery.ts";
+export * from "./reminder-id.ts";
 export * from "./resolver.ts";
 export { SIG, TAG } from "./tags.ts";
 export * from "./teams.ts";
