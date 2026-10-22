@@ -7,6 +7,7 @@ export * from "./handles.ts";
 export * from "./links.ts";
 export * from "./nodes.ts";
 export * from "./pins.ts";
+export * from "./push-notice.ts";
 export type * from "./reader.ts";
 export * from "./recovery.ts";
 export * from "./reminder-id.ts";

@@ -665,10 +665,15 @@ export type PortalRes = { url: string };
 export type PushEnvironment = "production" | "sandbox";
 /** `GET /push/config`: whether this server sends pushes (APNs configured). */
 export type PushConfigRes = { enabled: boolean };
-/** One of the account's push devices (`GET /push/devices`); tokens are never returned. */
-export type PushDeviceWire = { id: string; publicKey: string; createdAt: string };
-/** `POST /push/devices`: the APNs device token (hex), and the install's X25519 push public key (base64url). */
-export type AddPushDeviceReq = { token: string; environment: PushEnvironment; publicKey: string };
+/** One of the account's push devices (`GET /push/devices`); tokens are never returned. `mail`: new mail is pushed. */
+export type PushDeviceWire = { id: string; publicKey: string; mail: boolean; createdAt: string };
+/**
+ * `POST /push/devices`: the APNs device token (hex), and the install's X25519 push public key (base64url). `mail`
+ * also pushes new mail to it (off when left out).
+ */
+export type AddPushDeviceReq = { token: string; environment: PushEnvironment; publicKey: string; mail?: boolean };
+/** `PATCH /push/devices/:id`: switches new-mail pushes. */
+export type PatchPushDeviceReq = { mail: boolean };
 export type AddPushDeviceRes = { id: string };
 /** A reminder at `at` (ISO): `sealed` maps a push device id to the text sealed to it (base64url). */
 export type PushReminderWire = { key: string; at: string; sealed: Record<string, string> };
