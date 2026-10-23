@@ -34,6 +34,12 @@ export const TAG = {
   readerWallet: "jelly/reader-wallet@1",
   /** The device's Reader refresh state: feeds' ETags and timing, known item ids (sealed with the device key). */
   readerRefresh: "jelly/reader-refresh@1",
+  /** A batch of Vault changes, sealed with a vault key; the AD binds vault, device, sequence number and key id. */
+  vaultOps: "jelly/vault-ops@1",
+  /** The older vault keys, sealed with the newest so whoever opens it can read the whole log. */
+  vaultKeyring: "jelly/vault-keyring@1",
+  /** A Vault backup file's contents, sealed with the vault key it names. */
+  vaultBackup: "jelly/vault-backup@1",
 } as const;
 
 export const SIG = {

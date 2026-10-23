@@ -20,6 +20,15 @@ export {
 export { open, openJson, seal, sealJson } from "./envelope.ts";
 export { CryptoError } from "./errors.ts";
 export { constantTimeEqual, derive, sha256 } from "./hash.ts";
+export {
+  BIP39_WORDS,
+  newPasswordParams,
+  PASSWORD_LIMITS,
+  type PasswordParams,
+  passwordKey,
+  recoveryPhrase,
+  recoveryPhraseEntropy,
+} from "./password.ts";
 export { safetyPhrase } from "./phrase.ts";
 export {
   generateSigningKeyPair,

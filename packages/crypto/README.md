@@ -8,7 +8,8 @@ Every lock in jellysuite. A thin, typed layer over libsodium: nothing here is ho
 | `src/box.ts` | Sealed boxes, for giving a key to someone by their public key |
 | `src/sign.ts` | Ed25519 signatures with a context string |
 | `src/hash.ts` | Hashing and key derivation |
-| `src/phrase.ts` | Recovery phrases and safety words |
+| `src/password.ts` | Keys from passwords (Argon2id, with bounds on the parameters) and 24-word recovery phrases |
+| `src/phrase.ts` | Safety words |
 | `src/encoding.ts` | base64url without padding, the only binary encoding on the wire |
 | `src/sodium.ts` | `ready()`: wait for libsodium before anything else |
 
