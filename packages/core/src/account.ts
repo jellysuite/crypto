@@ -40,6 +40,12 @@ export type PrivateData = {
    * sight: the key chain is not re-anchored at whatever the server calls version 1. Also kept per device.
    */
   teamsSeen?: string[];
+  /**
+   * What this account took away, so a re-key never hands it back on the server's word: per node, the people
+   * removed from it (user id to the grant signatures on the shares of theirs it saw then) and the share links
+   * turned off.
+   */
+  revoked?: { people?: Record<string, Record<string, B64[]>>; links?: Record<string, string[]> };
 };
 export type TeamPin = {
   version: number;
@@ -49,6 +55,11 @@ export type TeamPin = {
    * earlier pin), so what they signed (a former member's proof, an old group key) can still be checked.
    */
   earlier?: Array<{ version: number; signPub: B64 }>;
+  /**
+   * Per group id, the newest group version this account verified (and its key): a floor the server can't roll
+   * back, as an older version is never sealed or granted to again.
+   */
+  groups?: Record<string, { version: number; encPub: B64 }>;
 };
 
 export type UnlockedAccount = {

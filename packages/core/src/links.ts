@@ -7,10 +7,14 @@ import {
   open,
   seal,
   sha256,
+  sign,
   toBase64Url,
   utf8,
+  verify,
 } from "@jelly/crypto";
-import { KDF, TAG } from "./tags.ts";
+import type { UnlockedAccount } from "./account.ts";
+import { lengthPrefixed } from "./grants.ts";
+import { KDF, SIG, TAG } from "./tags.ts";
 import type { B64 } from "./wire.ts";
 
 export const newLinkSecret = (): Bytes => generateKey();
@@ -55,3 +59,19 @@ export const wrapLinkSecret = (nodeKey: Bytes, linkId: string, secret: Bytes): B
 
 export const unwrapLinkSecret = (nodeKey: Bytes, linkId: string, wrapped: B64): Bytes =>
   open(nodeKey, TAG.linkSecret, fromBase64Url(wrapped), utf8(linkId));
+
+/** What a link's creator signs: the link, its item, its role and the hash of the secret's auth value. */
+export type SignedLinkFields = { id: string; nodeId: string; role: "viewer" | "editor"; authHash: B64 };
+
+export const linkPayload = (l: SignedLinkFields): Bytes => lengthPrefixed([l.id, l.nodeId, l.role, l.authHash]);
+
+export const signLink = (account: UnlockedAccount, l: SignedLinkFields): B64 =>
+  toBase64Url(sign(account.signing.privateKey, SIG.linkV1, linkPayload(l)));
+
+export function verifyLink(l: SignedLinkFields & { signature: B64 }, signPub: B64): boolean {
+  try {
+    return verify(fromBase64Url(signPub), SIG.linkV1, linkPayload(l), fromBase64Url(l.signature));
+  } catch {
+    return false;
+  }
+}

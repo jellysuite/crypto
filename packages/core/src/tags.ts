@@ -28,6 +28,11 @@ export const TAG = {
   callSignal: "jelly/call-signal@1",
   /** One Jelly Reader item, sealed with the reader key; the AD binds user, item id and key version. */
   readerItem: "jelly/reader-item@1",
+  /**
+   * A Reader article or image kept on the device for offline reading, sealed with the reader key; the AD binds it to
+   * its item (`item:<id>`) or its image (`image:<sha256 hex of its address>`). Never leaves the device.
+   */
+  readerKept: "jelly/reader-kept@1",
   /** The device's Reader search index (sealed with the device key, never leaves the device). */
   readerSearch: "jelly/reader-search@1",
   /** The device's Reader token wallet (sealed with the device key, never leaves the device). */
@@ -53,6 +58,8 @@ export const SIG = {
   groupKey: "group-key@1",
   groupMember: "group-member@1",
   groupGrant: "group-grant@1",
+  /** A share link row, signed by whoever made it: re-keys re-wrap only links someone on the item vouches for. */
+  linkV1: "link@1",
   teamInvite: "team-invite@1",
   inviteAccept: "invite-accept@1",
   chatEntry: "chat-entry@1",

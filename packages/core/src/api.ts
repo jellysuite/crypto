@@ -131,6 +131,8 @@ export type RotateReq = {
   grants: Grant[];
   parentLink?: ChildLink;
   links?: Array<{ id: string; wrappedNodeKey: B64; wrappedSecret: B64 }>;
+  /** Active links of the node nobody on it vouches for (or this account turned off): the server turns them off. */
+  droppedLinks?: string[];
   /** Required when the node has content: snapshots re-encrypted under the new key. */
   content?: { snapshots: Array<{ uptoSeq: number; envelope: B64 }> };
 };
@@ -142,6 +144,8 @@ export type CreateLinkReq = {
   keyVersion: number;
   wrappedNodeKey: B64;
   wrappedSecret: B64;
+  /** The creator's `signLink` over id, node, role and auth hash. */
+  signature: B64;
   /** ISO time, at most a year ahead. Omitted or null: never expires. */
   expiresAt?: string | null;
 };
@@ -151,6 +155,9 @@ export type LinkInfo = {
   role: "viewer" | "editor";
   keyVersion: number;
   wrappedSecret: B64;
+  createdBy: string;
+  /** The creator's `signLink`; null on links made before links were signed. */
+  signature: B64 | null;
   createdAt: string;
   /** Null: never expires. */
   expiresAt: string | null;
