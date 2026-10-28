@@ -22,6 +22,8 @@ export const TAG = {
   contactsSearch: "jelly/contacts-search@1",
   /** The device's spreadsheet search index per workspace (sealed with the device key, never leaves the device). */
   sheetsSearch: "jelly/sheets-search@1",
+  /** The device's presentation search index per workspace (sealed with the device key, never leaves the device). */
+  slidesSearch: "jelly/slides-search@1",
   /** A call epoch's media key, sealed under the call space's node key. */
   callKey: "jelly/call-key@1",
   /** In-call state (hands, reactions, mute requests, side chat, hellos) on the data channel, under the call key. */
