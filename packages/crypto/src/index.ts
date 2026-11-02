@@ -19,7 +19,7 @@ export {
 } from "./encoding.ts";
 export { open, openJson, seal, sealJson } from "./envelope.ts";
 export { CryptoError } from "./errors.ts";
-export { constantTimeEqual, derive, sha256 } from "./hash.ts";
+export { constantTimeEqual, derive, hashWith, sha256 } from "./hash.ts";
 export {
   BIP39_WORDS,
   newPasswordParams,

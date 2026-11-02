@@ -51,12 +51,12 @@ export const TAG = {
 
 export const SIG = {
   identityEncKey: "identity-enc-key",
-  /** Legacy grant format ('|'-joined); still verified for grants made before grant@2. */
-  grant: "grant",
   grantV2: "grant@2",
-  /** Membership statement: who vouched for a person (and their signing key) at a role on a node. */
-  member: "member@1",
   teamKey: "team-key@1",
+  /** The new team key signing back over the link before it, so a newcomer can walk the chain back to the first key. */
+  teamKeyBack: "team-key-back@1",
+  /** The team key naming the team's workspace root: the one node a client takes as the team's root. */
+  teamRoot: "team-root@1",
   groupKey: "group-key@1",
   groupMember: "group-member@1",
   groupGrant: "group-grant@1",
@@ -69,6 +69,12 @@ export const SIG = {
   callHello: "call-hello@1",
   /** One in-call signal, signed with the per-join key its sender's hello announced. */
   callSignal: "call-signal@1",
+  /** The account vouching for one of its push devices' keys: writers seal reminders only to keys it signed. */
+  pushDevice: "push-device@1",
+  /** One entry in a node's signed key history: the full state of who may do what, signed by its author. */
+  nodeLog: "node-log@1",
+  /** An account key change: the old key signs over to the new one and the new one signs back. */
+  keyChange: "key-change@1",
 } as const;
 
 export const KDF = {

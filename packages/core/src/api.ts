@@ -1,9 +1,19 @@
 // Request/response shapes shared by apps/api and packages/api-client.
 // The client is hand-written against these so the open-source packages never import the server.
 import type { Grant } from "./grants.ts";
+import type { KeyChange } from "./identity-chain.ts";
+import type { Snapshot } from "./log/types.ts";
 import type { ChildLink } from "./nodes.ts";
 import type { TreeNode } from "./resolver.ts";
-import type { GroupGrant, GroupVersion, InviteAcceptance, InviteStatement, MemberProof, TeamKeyLink } from "./teams.ts";
+import type {
+  GroupGrant,
+  GroupVersion,
+  InviteAcceptance,
+  InviteStatement,
+  MemberProof,
+  TeamKeyLink,
+  TeamRootStatement,
+} from "./teams.ts";
 import type { AccountBundle, B64, PublicIdentity, Role } from "./wire.ts";
 
 export type ApiErrorBody = { error: string; message: string };
@@ -18,7 +28,8 @@ export type RegisterFinishReq = {
   passwordWrap: B64;
   recoveryWrap: B64;
   recoveryAuthHash: B64;
-  workspace: { id: string; rootNodeId: string; rootMeta: B64; rootGrant: Grant };
+  /** `rootSnapshot`: the root's seq 0 snapshot, anchored to the new account (required). */
+  workspace: { id: string; rootNodeId: string; rootMeta: B64; rootGrant: Grant; rootSnapshot: Snapshot };
   /** The paid checkout session that pays for the account; required when the server has billing on. */
   checkout?: string;
 };
@@ -34,6 +45,8 @@ export type MeRes = {
   passwordWrap: B64;
   /** Revision of `bundle.privateData`; the next write must carry this + 1. */
   privateDataRevision: number;
+  /** This account's signing-key changes, oldest first; absent when the key never changed (spec §6.2). */
+  keyChanges?: KeyChange[];
 };
 export type LoginFinishRes = SessionRes & MeRes;
 
@@ -44,6 +57,8 @@ export type RecoverRes = {
   recoveryWrap: B64;
   bundle: AccountBundle;
   privateDataRevision: number;
+  /** The account's signing-key changes, oldest first; absent when the key never changed (spec §6.2). */
+  keyChanges?: KeyChange[];
 };
 export type PasswordStartReq = { registrationRequest: string };
 export type PasswordFinishReq = {
@@ -74,6 +89,19 @@ export type AccountDeletionStatus =
 export type DeleteAccountReq = { handle: string };
 /** Cents refunded for the unused part of a plan (0 when there was nothing to refund). */
 export type DeleteAccountRes = { refunded: number };
+/**
+ * `POST /account/key-change` (fresh re-auth): the signing key moves from the current one to `change.newSignPub`.
+ * `bundle` is the account re-sealed for the new key: `signPub` = `change.newSignPub`, `encPub` unchanged,
+ * `encPubSig` signed by the new key, `privateKeys` (new `signPriv`, same `encPriv`) and `privateData` sealed with the
+ * new `signPub` as associated data. `privateDataRevision` is the stored revision + 1 (as in `PrivateDataReq`).
+ * `pgpSealedKeys`, the PGP keys re-sealed for the new `signPub`, is required exactly when the account has PGP keys.
+ */
+export type KeyChangeReq = {
+  change: KeyChange;
+  bundle: AccountBundle;
+  privateDataRevision: number;
+  pgpSealedKeys?: B64;
+};
 export type PrivateDataReq = { privateData: B64; revision: number };
 export type HandleAvailableRes = { available: boolean; reason?: "format" | "reserved" | "taken" };
 
@@ -99,11 +127,60 @@ export type WorkspaceInfo = {
   /** Saved, the collection in the Reader folder (personal workspaces, once set up). */
   readerSavedId: string | null;
 };
-export type TreeRes = {
+/**
+ * Signed key history that comes with a response: each listed node's log (or its tail past the seq the request's
+ * `since` names), and every node log and group head those entries' deps name, transitively. A log with nothing
+ * (past `since`) is left out. Absent from older servers. The client keeps what it already holds: logs (merged by
+ * seq) and group history (merged by version), so a response that leaves something out never takes it away.
+ */
+export type LogsPart = {
+  logs?: Record<string, Snapshot[]>;
+  /**
+   * The latest signed version of each group the deps name: `head` is `groupHead` of the version's stable fields
+   * (team, group, version, encPub), so a team key rotation re-signing the version leaves it unchanged.
+   */
+  groupHeads?: Record<string, { version: number; head: B64 }>;
+  /**
+   * Signed membership history (R1) of each group the listed logs' deps name (in every entry of those logs, also
+   * the ones held below `since`): per group, its versions in order, from the oldest version a dep names up to the
+   * latest, each with its `head` (as in `groupHeads`) and the member proofs stored for that version. Bounded: at
+   * most 256 versions per group (the newest), and about 20,000 proofs in all (each group's latest version always,
+   * the rest shared out per group, newest first, whole versions); a version not listed is unknown, never "no
+   * members". The client keeps the history it already holds. Absent from older servers.
+   */
+  groupHistory?: Record<string, GroupHistoryVersion[]>;
+  /** The server stopped following deps at its depth bound: logs past the cut are missing (a gap). */
+  truncated?: true;
+  /** The asked-for nodes the server flagged for re-keying (`needs_rotation`): a re-key comes before any other change. */
+  flagged?: string[];
+};
+
+/**
+ * One signed version of a group as `groupHistory` serves it: who had a proof at that version. Proofs within one
+ * version can be signed under different team key versions (a team key rotation re-proves only the current
+ * version's members, and members added later are proved under the key current then), so the client accepts a
+ * proof under any key in the team's verified key chain.
+ */
+export type GroupHistoryVersion = {
+  version: number;
+  head: B64;
+  members: Array<{ userId: string; proof: MemberProof }>;
+};
+
+/**
+ * The body of `POST /nodes/:id/tree`, `POST /nodes/:id/members`, `POST /shared-with-me` and
+ * `POST /workspaces/:id/trash`: the same responses as their GETs, for a `since`
+ * too big for a query string (GET takes it as `?since=<JSON>`). `since` maps a node id to the last seq the client
+ * holds of that log (at most 1000 logs); only entries past it are sent.
+ */
+export type LogsQuery = { since?: Record<string, number> };
+
+export type TreeRes = LogsPart & {
   rootId: string;
   nodes: TreeNode[];
   links: ChildLink[];
   grants: Grant[];
+  /** The grantors' records and (with logs) those of everyone the served logs name: authors, shares, a root's anchor. */
   identities: PublicIdentity[];
   /** Absent from older servers: treat as []. */
   groupGrants: GroupGrant[];
@@ -111,18 +188,41 @@ export type TreeRes = {
   owners?: Array<{ nodeId: string; userId: string }>;
 };
 
-export type CreateNodeReq = { id: string; parentId: string; kind: string; meta: B64; link: ChildLink };
+export type CreateNodeReq = {
+  id: string;
+  parentId: string;
+  kind: string;
+  meta: B64;
+  link: ChildLink;
+  /** The node's seq 0 snapshot (signed key history), naming its parent's log: required. */
+  snapshot: Snapshot;
+};
 export type UpdateNodeReq = { keyVersion: number; meta: B64 };
-export type MoveNodeReq = { parentId: string; link: ChildLink };
+export type MoveNodeReq = { parentId: string; link: ChildLink; snapshot: Snapshot };
+/** `POST /nodes/:id/grants`: a share (or a role change, owners only) with the node's next log entry. */
+export type ShareReq = { grant: Grant; snapshot: Snapshot };
+/** `POST /nodes/:id/group-grants`: a group share (or a role change, owners only) with the next log entry. */
+export type GroupShareReq = { grant: GroupGrant; snapshot: Snapshot };
+/** `POST /nodes/:id/unrestrict`: the node's key linked under its parent's current key again. */
+export type UnrestrictReq = { parentLink: ChildLink; snapshot: Snapshot };
+/**
+ * The body of `DELETE /nodes/:id/grants/:me` (leaving): a `change: "leave"` snapshot signed by the one leaving, the
+ * state minus their share at the same version. Removing someone else is refused (`snapshot_use_rotate`: rotate).
+ */
+export type LeaveReq = { snapshot: Snapshot };
+/** The body of `POST /chat/channels/:id/leave`: a private channel's or DM's `leave` snapshot (none for a public one). */
+export type ChatLeaveReq = { snapshot?: Snapshot };
 
 export type GrantEntry = { grant: Grant; identity: PublicIdentity };
 export type GroupGrantEntry = { grant: GroupGrant; group: GroupVersion };
 /** Shares on a node and its visible ancestors; `chain` is the node then its ancestors, nearest first. */
-export type MembersRes = {
+export type MembersRes = LogsPart & {
   chain: string[];
   entries: GrantEntry[];
   /** Group grants on the same chain, each with its group's current version. Absent from older servers. */
   groupEntries: GroupGrantEntry[];
+  /** The identity records of everyone the served logs name (authors, shares, a root's anchor). Absent from older servers. */
+  identities?: PublicIdentity[];
 };
 export type RotateReq = {
   keyVersion: number;
@@ -135,6 +235,14 @@ export type RotateReq = {
   droppedLinks?: string[];
   /** Required when the node has content: snapshots re-encrypted under the new key. */
   content?: { snapshots: Array<{ uptoSeq: number; envelope: B64 }> };
+  /** People and groups whose shares go with this re-key (R2): current shares only, each once; needs owner. */
+  removed?: { users: string[]; groups: string[] };
+  /**
+   * The node's next log entry: its state after the re-key and what it carries (removals, a restriction). Deleted
+   * accounts it names in `skipped` (§5.5) get no grant in `grants` and keep the grant row they had, at an older
+   * keyVersion: expected, since it opens no new key, and it keeps the cache agreeing with the log's shares.
+   */
+  snapshot: Snapshot;
 };
 
 export type CreateLinkReq = {
@@ -148,6 +256,8 @@ export type CreateLinkReq = {
   signature: B64;
   /** ISO time, at most a year ahead. Omitted or null: never expires. */
   expiresAt?: string | null;
+  /** The node's next log entry: its state with this link added. */
+  snapshot: Snapshot;
 };
 export type LinkStatus = "live" | "paused" | "blocked" | "expired";
 export type LinkInfo = {
@@ -176,12 +286,20 @@ export type ReportReq = {
   sealed: { userId: string; box: B64 }[];
 };
 export type OpenLinkReq = { auth: B64 };
+/**
+ * A share link opened: its session and key, and what the visitor checks the link by. No logs and no identity
+ * records: a link session learns the item, never who else has access to it or to the folders above (§5.4, §11).
+ */
 export type OpenLinkRes = {
   token: string;
   nodeId: string;
   role: "viewer" | "editor";
   keyVersion: number;
   wrappedNodeKey: B64;
+  /** The creator's link@1 signature over the link's id, item, role and auth hash; null for a link made before links were signed. */
+  signature: B64 | null;
+  /** The creator's signing keys, oldest first, ending at the current one: the signature verifies under one of them. */
+  creatorKeys: B64[];
 };
 
 // ---- Teams ----
@@ -200,10 +318,14 @@ export type CreateTeamReq = {
   teamKey: TeamKeyLink;
   /** The team signer, sealed to the creator. */
   teamKeySeal: B64;
+  /** The team key naming the workspace root (`workspace.rootNodeId`). */
+  root: TeamRootStatement;
   everyone: CreateTeamGroup;
   admins: CreateTeamGroup;
   /** TeamMeta under teamMetaKey(everyone). */
   meta: B64;
+  /** The root's seq 0 snapshot, anchored to the team: required. */
+  rootSnapshot: Snapshot;
 };
 export type TeamRole = "owner" | "admin" | "member";
 export type TeamStatus = "invited" | "active" | "suspended" | "removed";
@@ -246,6 +368,8 @@ export type TeamInfo = {
   meta: B64;
   metaVersion: number;
   teamKeys: TeamKeyLink[];
+  /** The team key naming `rootNodeId`: a client takes no other node for the team's root. */
+  root: TeamRootStatement;
   /** An admin left: the next admin client online rotates the team key (POST /teams/:id/keys/rotate). */
   needsKeyRotation: boolean;
   /** Empty unless the caller is an active member. */
@@ -261,6 +385,20 @@ export type TeamInfo = {
   invitedBy?: string;
 };
 export type FormerMemberInfo = { userId: string; signPub: B64; proof: MemberProof };
+/**
+ * `GET /teams/:id/verification`: what checking a team's history needs and nothing more, for someone outside the
+ * team who holds a share (a grant or group grant) on an item in its workspace (Task 6b, §11): the key chain, the
+ * root statement, each group's signed versions and current proofs (account ids and signing keys, as the proofs
+ * carry them), and the groups' signed membership history. No names, no seals, no roles or statuses.
+ */
+export type TeamVerificationRes = {
+  id: string;
+  rootNodeId: string;
+  root: TeamRootStatement;
+  teamKeys: TeamKeyLink[];
+  groups: Array<Pick<TeamGroupInfo, "id" | "builtin" | "version" | "versions" | "memberIds" | "proofs">>;
+  groupHistory: Record<string, GroupHistoryVersion[]>;
+};
 export type TeamMetaReq = { meta: B64; metaVersion: number };
 export type TransferTeamReq = { userId: string };
 /**
@@ -269,6 +407,8 @@ export type TransferTeamReq = { userId: string };
  */
 export type RotateTeamKeyReq = {
   link: TeamKeyLink;
+  /** The workspace root named again under the new key (the statement is bound to the key version, like proofs). */
+  root: TeamRootStatement;
   seals: Array<{ userId: string; sealed: B64 }>;
   groupVersions: GroupVersion[];
   proofs: Array<{ groupId: string; userId: string; proof: MemberProof }>;
@@ -398,12 +538,22 @@ export type RestrictedCreateReq = {
   meta: B64;
   grants: Grant[];
   groupGrants: GroupGrant[];
+  /** The node's seq 0, stating exactly these shares with their roles and naming its parent's log: required. */
+  snapshot: Snapshot;
 };
-/** The Channels system folder (under the team root) and #general (under the folder), both linked. */
-export type ChatSetupReq = { folder: CreateNodeReq; general: CreateNodeReq };
+/**
+ * The Channels system folder (under the team root) and #general (under the folder), both linked, with both
+ * nodes' seq 0 snapshots beside them (required; none inside the nodes).
+ */
+export type ChatSetupReq = {
+  folder: Omit<CreateNodeReq, "snapshot">;
+  general: Omit<CreateNodeReq, "snapshot">;
+  snapshots: { folder: Snapshot; general: Snapshot };
+};
 export type ChatSetupRes = { channelsFolderId: string; generalId: string };
 export type CreateChannelReq =
-  | { teamId: string; visibility: "public"; node: CreateNodeReq; ownerGrant: Grant }
+  /** No share of its own: the team's Admins own it, its creator edits through Everyone. */
+  | { teamId: string; visibility: "public"; node: CreateNodeReq }
   | { teamId: string; visibility: "private"; node: RestrictedCreateReq };
 /** Participants are 2–8 active team members including the caller; each gets a direct share (the caller: owner). */
 export type CreateDmReq = { teamId: string; participants: string[]; node: RestrictedCreateReq };
@@ -672,13 +822,23 @@ export type PortalRes = { url: string };
 export type PushEnvironment = "production" | "sandbox";
 /** `GET /push/config`: whether this server sends pushes (APNs configured). */
 export type PushConfigRes = { enabled: boolean };
-/** One of the account's push devices (`GET /push/devices`); tokens are never returned. `mail`: new mail is pushed. */
-export type PushDeviceWire = { id: string; publicKey: string; mail: boolean; createdAt: string };
+/**
+ * One of the account's push devices (`GET /push/devices`); tokens are never returned. `mail`: new mail is pushed.
+ * `keySig`: the account's signature over the push key as registered (null on rows from before 0.4.1); writers seal
+ * only to devices whose signature verifies against the account's own signing key (`verifyPushDevice`).
+ */
+export type PushDeviceWire = { id: string; publicKey: string; keySig: string | null; mail: boolean; createdAt: string };
 /**
  * `POST /push/devices`: the APNs device token (hex), and the install's X25519 push public key (base64url). `mail`
- * also pushes new mail to it (off when left out).
+ * also pushes new mail to it (off when left out). `keySig`: `signPushDevice` over the push key (base64url, 64 bytes).
  */
-export type AddPushDeviceReq = { token: string; environment: PushEnvironment; publicKey: string; mail?: boolean };
+export type AddPushDeviceReq = {
+  token: string;
+  environment: PushEnvironment;
+  publicKey: string;
+  keySig?: string;
+  mail?: boolean;
+};
 /** `PATCH /push/devices/:id`: switches new-mail pushes. */
 export type PatchPushDeviceReq = { mail: boolean };
 export type AddPushDeviceRes = { id: string };

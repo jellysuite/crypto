@@ -1,4 +1,4 @@
-import { fromBase64Url, sign, toBase64Url, verify } from "@jelly/crypto";
+import { fromBase64Url, sign, toBase64Url, utf8, verify } from "@jelly/crypto";
 import { describe, expect, it } from "vitest";
 import {
   type ChildLink,
@@ -9,7 +9,6 @@ import {
   type Grant,
   grantPayload,
   KeyResolver,
-  legacyGrantPayload,
   newNodeKey,
   openGrant,
   type PublicIdentity,
@@ -83,34 +82,16 @@ describe("grants", () => {
     expect(verifyGrant(grant, carol.identity.signPub)).toBe(false);
   });
 
-  it("signs new grants under the length-prefixed grant@2 format", () => {
+  it("signs new grants under the length-prefixed grant@2 format, and takes no other", () => {
     expect(
       verify(fromBase64Url(alice.identity.signPub), SIG.grantV2, grantPayload(grant), fromBase64Url(grant.signature)),
     ).toBe(true);
-    expect(
-      verify(
-        fromBase64Url(alice.identity.signPub),
-        SIG.grant,
-        legacyGrantPayload(grant),
-        fromBase64Url(grant.signature),
-      ),
-    ).toBe(false);
-  });
-
-  it("still accepts well-formed grants signed before grant@2, and nothing ambiguous", () => {
-    const ids = { nodeId: crypto.randomUUID(), granteeId: crypto.randomUUID(), grantorId: crypto.randomUUID() };
-    const unsigned = { ...ids, keyVersion: 1, role: "viewer" as const, sealedKey: grant.sealedKey };
-    const legacy = {
-      ...unsigned,
-      signature: toBase64Url(sign(alice.account.signing.privateKey, SIG.grant, legacyGrantPayload(unsigned))),
-    };
-    expect(verifyGrant(legacy, alice.identity.signPub)).toBe(true);
-    const odd = { ...unsigned, nodeId: "n|1" };
-    const oddLegacy = {
-      ...odd,
-      signature: toBase64Url(sign(alice.account.signing.privateKey, SIG.grant, legacyGrantPayload(odd))),
-    };
-    expect(verifyGrant(oddLegacy, alice.identity.signPub)).toBe(false);
+    // The original '|'-joined format (tag "grant") is gone with the data it was for.
+    const legacyPayload = utf8(
+      [grant.nodeId, grant.keyVersion, grant.granteeId, grant.grantorId, grant.role, grant.sealedKey].join("|"),
+    );
+    const legacy = { ...grant, signature: toBase64Url(sign(alice.account.signing.privateKey, "grant", legacyPayload)) };
+    expect(verifyGrant(legacy, alice.identity.signPub)).toBe(false);
   });
 
   it("refuses to grant to an identity with a forged encryption key", () => {

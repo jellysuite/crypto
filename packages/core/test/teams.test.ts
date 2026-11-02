@@ -30,6 +30,53 @@ describe("team key chain", () => {
       T.verifyTeamChain(teamId, { version: 2, signPub: v2.link.signPub }, [v1.link, v2.link, v3.link])?.version,
     ).toBe(3);
   });
+  it("a newcomer walks back from its pin to the first key; a forged predecessor stops the walk, not the pin", () => {
+    const teamId = crypto.randomUUID();
+    const v1 = T.createTeamKey(teamId);
+    const v2 = T.nextTeamKey(v1.signer);
+    const v3 = T.nextTeamKey(v2.signer);
+    const links = [v1.link, v2.link, v3.link];
+    const pinned = { version: 3, signPub: v3.link.signPub };
+    expect(T.earlierTeamKeys(teamId, pinned, links)).toEqual([
+      { version: 1, signPub: v1.link.signPub },
+      { version: 2, signPub: v2.link.signPub },
+    ]);
+    // Anyone can mint a key and "sign" the real head with it: the head's back-signature doesn't cover it.
+    const evil = T.createTeamKey(teamId);
+    const forged2 = {
+      ...T.nextTeamKey(evil.signer).link,
+      version: 2,
+      prevSignature: v2.link.prevSignature,
+      backSignature: v2.link.backSignature,
+    };
+    expect(T.earlierTeamKeys(teamId, pinned, [v1.link, forged2, v3.link])).toEqual([]);
+    const forged1 = { ...evil.link, version: 1 };
+    expect(T.earlierTeamKeys(teamId, pinned, [forged1, v2.link, v3.link])).toEqual([
+      { version: 2, signPub: v2.link.signPub },
+    ]);
+    // The walk still needs the pin itself to be in the chain.
+    expect(T.earlierTeamKeys(teamId, { version: 3, signPub: evil.link.signPub }, links)).toEqual([]);
+    expect(T.earlierTeamKeys(teamId, { version: 1, signPub: v1.link.signPub }, links)).toEqual([]);
+    // A missing back-signature breaks the chain both ways (every link past the first carries one).
+    const noBack = { ...v2.link, backSignature: null };
+    expect(T.earlierTeamKeys(teamId, pinned, [v1.link, noBack, v3.link])).toEqual([
+      { version: 2, signPub: v2.link.signPub },
+    ]);
+    expect(T.verifyTeamChain(teamId, { version: 1, signPub: v1.link.signPub }, [v1.link, noBack, v3.link])).toBeNull();
+  });
+  it("a team root statement verifies under the team key that signed it, for that team and root only", () => {
+    const teamId = crypto.randomUUID();
+    const { link, signer } = T.createTeamKey(teamId);
+    const rootNodeId = crypto.randomUUID();
+    const s = T.createTeamRootStatement(signer, rootNodeId);
+    expect(s).toMatchObject({ teamId, rootNodeId, teamKeyVersion: 1 });
+    expect(T.verifyTeamRootStatement(s, link.signPub)).toBe(true);
+    expect(T.verifyTeamRootStatement({ ...s, rootNodeId: crypto.randomUUID() }, link.signPub)).toBe(false);
+    expect(T.verifyTeamRootStatement({ ...s, teamId: crypto.randomUUID() }, link.signPub)).toBe(false);
+    expect(T.verifyTeamRootStatement({ ...s, teamKeyVersion: 2 }, link.signPub)).toBe(false);
+    expect(T.verifyTeamRootStatement(s, T.createTeamKey(teamId).link.signPub)).toBe(false);
+    expect(T.verifyTeamRootStatement({ ...s, signature: "not-a-signature" }, link.signPub)).toBe(false);
+  });
   it("seals the signer to an admin, bound to team and version", () => {
     const alice = user("alice");
     const { signer } = T.createTeamKey(crypto.randomUUID());

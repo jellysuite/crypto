@@ -39,7 +39,22 @@ const checkSig = (pub: B64, context: string, payload: () => Bytes, signature: ()
 
 // ---- Team signing key chain ----
 
-export type TeamKeyLink = { teamId: string; version: number; signPub: B64; prevSignature: B64 | null };
+/**
+ * One version of a team's signing key. Past the first, each link is signed both ways: `prevSignature` by the key
+ * before it (forward: a member pinned earlier follows the chain to the newest key) and `backSignature` by its own key
+ * over the link before it (backward: a member pinned later walks the chain down to the first key, so proofs and
+ * group versions signed under earlier keys can be checked). Forward signatures alone can't authenticate backwards:
+ * anyone could mint a key that "signs" the real head.
+ */
+export type TeamKeyLink = {
+  teamId: string;
+  version: number;
+  signPub: B64;
+  /** The previous key's signature over this link; null for version 1. */
+  prevSignature: B64 | null;
+  /** This key's signature over the previous link; null for version 1, required from version 2 on. */
+  backSignature: B64 | null;
+};
 export type TeamSigner = { teamId: string; version: number; signing: KeyPair };
 
 const linkPayload = (l: Pick<TeamKeyLink, "teamId" | "version" | "signPub">): Bytes =>
@@ -48,7 +63,7 @@ const linkPayload = (l: Pick<TeamKeyLink, "teamId" | "version" | "signPub">): By
 export function createTeamKey(teamId: string): { link: TeamKeyLink; signer: TeamSigner } {
   const signing = generateSigningKeyPair();
   return {
-    link: { teamId, version: 1, signPub: b64(signing.publicKey), prevSignature: null },
+    link: { teamId, version: 1, signPub: b64(signing.publicKey), prevSignature: null, backSignature: null },
     signer: { teamId, version: 1, signing },
   };
 }
@@ -56,10 +71,46 @@ export function createTeamKey(teamId: string): { link: TeamKeyLink; signer: Team
 export function nextTeamKey(prev: TeamSigner): { link: TeamKeyLink; signer: TeamSigner } {
   const signing = generateSigningKeyPair();
   const link = { teamId: prev.teamId, version: prev.version + 1, signPub: b64(signing.publicKey) };
+  const prevLink = { teamId: prev.teamId, version: prev.version, signPub: b64(prev.signing.publicKey) };
   return {
-    link: { ...link, prevSignature: b64(sign(prev.signing.privateKey, SIG.teamKey, linkPayload(link))) },
+    link: {
+      ...link,
+      prevSignature: b64(sign(prev.signing.privateKey, SIG.teamKey, linkPayload(link))),
+      backSignature: b64(sign(signing.privateKey, SIG.teamKeyBack, linkPayload(prevLink))),
+    },
     signer: { teamId: prev.teamId, version: link.version, signing },
   };
+}
+
+/** Whether `link` follows `prev` in one team's chain: signed forward by `prev`'s key and back by its own. */
+function linked(prev: TeamKeyLink, link: TeamKeyLink): boolean {
+  const { prevSignature, backSignature } = link;
+  if (prev.teamId !== link.teamId || link.version !== prev.version + 1 || !prevSignature || !backSignature)
+    return false;
+  return (
+    checkSig(
+      prev.signPub,
+      SIG.teamKey,
+      () => linkPayload(link),
+      () => prevSignature,
+    ) &&
+    checkSig(
+      link.signPub,
+      SIG.teamKeyBack,
+      () => linkPayload(prev),
+      () => backSignature,
+    )
+  );
+}
+
+/** The links by version, or null when one is foreign or a version comes twice (a fork). */
+function chainOf(teamId: string, links: TeamKeyLink[]): Map<number, TeamKeyLink> | null {
+  const byVersion = new Map<number, TeamKeyLink>();
+  for (const l of links) {
+    if (l.teamId !== teamId || byVersion.has(l.version)) return null;
+    byVersion.set(l.version, l);
+  }
+  return byVersion;
 }
 
 /** From a pinned (version, signPub), follows signed links to the newest; null on any break, fork or foreign link. */
@@ -69,25 +120,11 @@ export function verifyTeamChain(
   links: TeamKeyLink[],
 ): TeamKeyLink | null {
   try {
-    const byVersion = new Map<number, TeamKeyLink>();
-    for (const l of links) {
-      if (l.teamId !== teamId || byVersion.has(l.version)) return null;
-      byVersion.set(l.version, l);
-    }
-    let current = byVersion.get(pinned.version);
-    if (!current || current.signPub !== pinned.signPub) return null;
+    const byVersion = chainOf(teamId, links);
+    let current = byVersion?.get(pinned.version);
+    if (!byVersion || !current || current.signPub !== pinned.signPub) return null;
     for (let next = byVersion.get(current.version + 1); next; next = byVersion.get(current.version + 1)) {
-      const sig = next.prevSignature;
-      if (!sig) return null;
-      if (
-        !checkSig(
-          current.signPub,
-          SIG.teamKey,
-          () => linkPayload(next),
-          () => sig,
-        )
-      )
-        return null;
+      if (!linked(current, next)) return null;
       current = next;
     }
     // A newer link that the chain did not reach is a gap, not something to ignore.
@@ -97,6 +134,62 @@ export function verifyTeamChain(
     return null;
   }
 }
+
+/**
+ * The keys before a pinned (version, signPub), oldest first, as far as the chain's back-signatures reach: each
+ * link is vouched for by the one after it, which the pin (or a link it vouched for) signed back over. A link that
+ * doesn't check out stops the walk there; what came before it stays unverified, and the pin stands as it is.
+ * Empty for a pin the chain doesn't carry.
+ */
+export function earlierTeamKeys(
+  teamId: string,
+  pinned: { version: number; signPub: B64 },
+  links: TeamKeyLink[],
+): Array<{ version: number; signPub: B64 }> {
+  const out: Array<{ version: number; signPub: B64 }> = [];
+  try {
+    const byVersion = chainOf(teamId, links);
+    let current = byVersion?.get(pinned.version);
+    if (!byVersion || !current || current.signPub !== pinned.signPub) return out;
+    for (
+      let prev = byVersion.get(current.version - 1);
+      prev && linked(prev, current);
+      prev = byVersion.get(current.version - 1)
+    ) {
+      out.unshift({ version: prev.version, signPub: prev.signPub });
+      current = prev;
+    }
+  } catch {
+    // What was walked before the error stands; the rest is unverified.
+  }
+  return out;
+}
+
+// ---- The team's root ----
+
+/**
+ * The team key naming the team's workspace root (§4.2, Task 6b): the root's id derives from its seq 0, which depends
+ * on the team's first group versions, so the statement is made once the root is signed and sent with the team. A
+ * client takes a node as "the team's root" only when a statement signed by a team key it verified names it.
+ */
+export type TeamRootStatement = { teamId: string; rootNodeId: string; teamKeyVersion: number; signature: B64 };
+
+const rootPayload = (s: Omit<TeamRootStatement, "signature">): Bytes =>
+  lengthPrefixed([s.teamId, s.rootNodeId, String(s.teamKeyVersion)]);
+
+export function createTeamRootStatement(team: TeamSigner, rootNodeId: string): TeamRootStatement {
+  const unsigned = { teamId: team.teamId, rootNodeId, teamKeyVersion: team.version };
+  return { ...unsigned, signature: b64(sign(team.signing.privateKey, SIG.teamRoot, rootPayload(unsigned))) };
+}
+
+/** Whether the team key `teamSignPub` (the version the statement names, verified by the caller) signed it. */
+export const verifyTeamRootStatement = (s: TeamRootStatement, teamSignPub: B64): boolean =>
+  checkSig(
+    teamSignPub,
+    SIG.teamRoot,
+    () => rootPayload(s),
+    () => s.signature,
+  );
 
 export function sealTeamSigner(s: TeamSigner, toEncPub: B64): B64 {
   const payload = {

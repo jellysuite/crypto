@@ -15,11 +15,17 @@ import {
   utf8,
   verify,
 } from "@jelly/crypto";
+import type { KeyChangeReq } from "./api.ts";
+import { createKeyChange } from "./identity-chain.ts";
 import { newRecoveryMaterial } from "./recovery.ts";
 import { KDF, SIG, TAG } from "./tags.ts";
 import type { AccountBundle, B64, PublicIdentity } from "./wire.ts";
 
-export type PinnedKey = { signPub: B64; verified: boolean };
+/**
+ * A contact's pinned signing key. `earlier` holds every key this account pinned for them before, oldest first
+ * (spec §6.1: pins keep their history), so what they signed under an older key still resolves to them.
+ */
+export type PinnedKey = { signPub: B64; verified: boolean; earlier?: B64[] };
 /** A contact's pinned OpenPGP public key (armored) and where we first got it. */
 export type PgpContact = {
   fingerprint: string;
@@ -60,6 +66,16 @@ export type TeamPin = {
    * back, as an older version is never sealed or granted to again.
    */
   groups?: Record<string, { version: number; encPub: B64 }>;
+  /**
+   * The team's workspace root, as a statement signed by a verified team key named it: a root the server names
+   * otherwise is refused, and the fold takes no other team-anchored root for this team's (Task 6b).
+   */
+  rootNodeId?: string;
+  /**
+   * Pinned on first sight by someone outside the team who holds a share on one of its items (§11): no membership,
+   * no group keys, the team's history is only checked. Cleared when this account joins the team.
+   */
+  outsider?: boolean;
 };
 
 export type UnlockedAccount = {
@@ -160,5 +176,37 @@ export function unlockAccount(input: {
     encryption: { publicKey: fromBase64Url(bundle.encPub), privateKey: fromBase64Url(keys.encPriv) },
     privateData,
     privateDataLost,
+  };
+}
+
+/**
+ * The body of `POST /account/key-change`: the signing key moves to `next` and the account is re-sealed for it,
+ * since its private blobs are bound to the signing key. The encryption key stays (grants and seals are made to it).
+ * `privateDataRevision` is the server's revision + 1; `pgpKeys` are the account's opened PGP keys, if it has any.
+ */
+export function keyChangeRequest(
+  account: UnlockedAccount,
+  next: KeyPair,
+  opts: { at: string; privateDataRevision: number; pgpKeys?: string[] },
+): KeyChangeReq {
+  const signPub = toBase64Url(next.publicKey);
+  const keys: PrivateKeys = {
+    signPriv: toBase64Url(next.privateKey),
+    encPriv: toBase64Url(account.encryption.privateKey),
+  };
+  return {
+    change: createKeyChange(account, next, opts.at),
+    bundle: {
+      signPub,
+      encPub: toBase64Url(account.encryption.publicKey),
+      encPubSig: toBase64Url(sign(next.privateKey, SIG.identityEncKey, account.encryption.publicKey)),
+      privateKeys: toBase64Url(sealJson(account.ak, TAG.privateKeys, keys, accountAd(signPub))),
+      privateData: encryptPrivateData(account.ak, signPub, {
+        ...account.privateData,
+        revision: opts.privateDataRevision,
+      }),
+    },
+    privateDataRevision: opts.privateDataRevision,
+    ...(opts.pgpKeys ? { pgpSealedKeys: sealPgpKeys(account.ak, signPub, opts.pgpKeys) } : {}),
   };
 }

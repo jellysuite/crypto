@@ -1,6 +1,7 @@
 import type { Bytes, KeyPair } from "@jelly/crypto";
 import type { UnlockedAccount } from "./account.ts";
 import { type Grant, openGrant, verifyGrant } from "./grants.ts";
+import { keyChain } from "./identity-chain.ts";
 import { type ChildLink, unwrapChildKey } from "./nodes.ts";
 import { type GroupGrant, openGroupGrant, verifyGroupGrant } from "./teams.ts";
 import type { B64, PublicIdentity, Role } from "./wire.ts";
@@ -21,6 +22,19 @@ export type TreeNode = {
 };
 
 const ref = (id: string, version: number) => `${id}:${version}`;
+
+/**
+ * Every signing key of the record, its current one and the earlier ones its key changes chain to (spec §6.2): a
+ * grant signed before the grantor changed keys still verifies. The current key alone when the chain doesn't verify.
+ */
+function signKeysOf(id: PublicIdentity): B64[] {
+  if (!id.keyChanges?.length) return [id.signPub];
+  try {
+    return keyChain(id.signPub, id.keyChanges, id.userId) ?? [id.signPub];
+  } catch {
+    return [id.signPub];
+  }
+}
 
 /**
  * How the resolver reached a key: through `link`, a child link under the key of `parentId` (bound by the link's
@@ -141,7 +155,7 @@ export class KeyResolver {
       return null;
     }
     const grantor = this.identities(g.grantorId, g.nodeId);
-    if (!grantor || !verifyGrant(g, grantor.signPub)) {
+    if (!grantor || !signKeysOf(grantor).some((k) => verifyGrant(g, k))) {
       this.unverified.add(g.nodeId);
       return null;
     }
@@ -163,7 +177,7 @@ export class KeyResolver {
       const groupKey = this.groupKeys.get(ref(g.groupId, g.groupVersion));
       if (!groupKey) continue;
       const grantor = this.identities(g.grantorId, g.nodeId);
-      if (!grantor || !verifyGroupGrant(g, grantor.signPub)) {
+      if (!grantor || !signKeysOf(grantor).some((k) => verifyGroupGrant(g, k))) {
         this.unverified.add(g.nodeId);
         continue;
       }

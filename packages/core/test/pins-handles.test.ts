@@ -16,6 +16,20 @@ describe("pins", () => {
     expect(empty.pinnedKeys).toEqual({});
     expect(pin(verified, "u2", "k1").pinnedKeys.u2?.verified).toBe(true);
   });
+
+  it("keeps every earlier key when the pin moves to a new one (spec §6.1)", () => {
+    const k1 = pin(empty, "u2", "k1", true);
+    expect(k1.pinnedKeys.u2).toEqual({ signPub: "k1", verified: true });
+    const k2 = pin(k1, "u2", "k2", true);
+    expect(k2.pinnedKeys.u2).toEqual({ signPub: "k2", verified: true, earlier: ["k1"] });
+    const k3 = pin(k2, "u2", "k3");
+    expect(k3.pinnedKeys.u2).toEqual({ signPub: "k3", verified: false, earlier: ["k1", "k2"] });
+    // Re-pinning the current key adds nothing; moving back to an earlier key keeps the rest without repeating it.
+    expect(pin(k3, "u2", "k3").pinnedKeys.u2?.earlier).toEqual(["k1", "k2"]);
+    expect(pin(k3, "u2", "k1").pinnedKeys.u2).toEqual({ signPub: "k1", verified: false, earlier: ["k2", "k3"] });
+    // Only the current key decides match or mismatch; the resolver reads the history (api-client).
+    expect(checkPin(k3, "u2", "k1")).toBe("mismatch");
+  });
 });
 
 describe("handles", () => {
