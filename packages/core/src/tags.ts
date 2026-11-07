@@ -11,6 +11,8 @@ export const TAG = {
   groupKey: "jelly/group-key@1",
   teamMeta: "jelly/team-meta@1",
   groupMeta: "jelly/group-meta@1",
+  /** A member's photo and colour for one team, under its `everyone` key; the AD binds team, member and version. */
+  teamProfile: "jelly/team-profile@1",
   chatEntry: "jelly/chat-entry@1",
   chatKeyHistory: "jelly/chat-key-history@1",
   chatAwareness: "jelly/chat-awareness@1",
@@ -75,6 +77,8 @@ export const SIG = {
   nodeLog: "node-log@1",
   /** An account key change: the old key signs over to the new one and the new one signs back. */
   keyChange: "key-change@1",
+  /** A member vouching for their own team profile (every member holds the key it's sealed with). */
+  teamProfile: "team-profile@1",
 } as const;
 
 export const KDF = {
@@ -87,6 +91,7 @@ export const KDF = {
   inviteSign: "jelly/invite-sign",
   inviteAuth: "jelly/invite-auth",
   teamMeta: "jelly/team-meta",
+  teamProfile: "jelly/team-profile",
   /** Keys the tags of addresses kept in private settings (dismissed contact suggestions). */
   contactSuggestions: "jelly/contact-suggestions",
 } as const;

@@ -15,5 +15,6 @@ export * from "./recovery.ts";
 export * from "./reminder-id.ts";
 export * from "./resolver.ts";
 export { SIG, TAG } from "./tags.ts";
+export * from "./team-profile.ts";
 export * from "./teams.ts";
 export * from "./wire.ts";

@@ -431,7 +431,11 @@ export type TeamMemberInfo = {
   /** The account was deleted (a tombstone: "Former member"); only removed members can be. */
   deleted: boolean;
   identity: PublicIdentity;
+  /** Their team profile (core `sealTeamProfile`) and the everyone version it's sealed for, if they set one. */
+  profile?: { data: B64; signature: B64; version: number };
 };
+/** Sets (or, with `profile: null`, clears) your own team profile. */
+export type SetTeamProfileReq = { profile: B64; signature: B64; version: number } | { profile: null };
 /**
  * A removed member as non-admins see them with `?all=1`: enough to name an author who left ("(left)" or, once
  * the account is deleted, "Former member"), nothing more.

@@ -283,6 +283,84 @@ describe("moves, roots and cycles", () => {
     expect(moved.length).toBeLessThanOrEqual(1);
   });
 
+  it("moving into a restricted area it wasn't in needs owner on the node; within one, or out, editor", () => {
+    const { r, p1, p2 } = workspace();
+    // bob's own private channel (he made it with only editor on p1, §3.3), and a restricted folder alice shares
+    // with him as owner
+    const chan = Log.create(
+      bob,
+      childState(p1.nodeId, { kind: "channel", restricted: true, shares: [share(bob, "owner")] }),
+      [p1.dep(), r.dep()],
+    );
+    const secret = Log.create(
+      alice,
+      childState(p1.nodeId, { restricted: true, shares: [share(alice, "owner"), share(bob, "owner")] }),
+      [p1.dep(), r.dep()],
+    );
+    const inner = Log.create(alice, childState(secret.nodeId), [secret.dep(), p1.dep(), r.dep()]);
+    const into = (by: U, node: Log, to: Log) => {
+      const l = new Log(node.nodeId);
+      l.entries = [...node.entries];
+      const base = node.last().state;
+      const deps = new Map<string, Dep>();
+      for (const d of [
+        ...authorityDeps(world([r, p1, p2, chan, secret, inner, node]), node.nodeId),
+        ...authorityDeps(world([r, p1, p2, chan, secret, inner]), to.nodeId),
+        to.dep(),
+      ])
+        deps.set(d.log, d);
+      l.add(by, { ...base, parentId: to.nodeId }, [...deps.values()]);
+      return l;
+    };
+    const placed = (l: Log) => {
+      const w = world([r, p1, p2, chan, secret, inner, l]);
+      const ns = st(w, l.nodeId);
+      expect(ns.status).toEqual(verified);
+      return { parentId: ns.state.parentId, w };
+    };
+    // alice's page in p2: bob edits it through the root, owns nothing on it
+    const page = Log.create(alice, childState(p2.nodeId, { kind: "page" }), [p2.dep(), r.dep()]);
+
+    // bob, an editor, moves it into his channel or into the folder he owns: skipped, alice keeps it
+    for (const to of [chan, secret]) {
+      const { parentId, w } = placed(into(bob, page, to));
+      expect(parentId).toBe(p2.nodeId);
+      expect(w.role(alice.id, page.nodeId)).toBe("owner");
+      expect(w.role(bob.id, page.nodeId)).toBe("editor");
+    }
+    // alice, an owner on it, moves it into the restricted folder: applies
+    expect(placed(into(alice, page, secret)).parentId).toBe(secret.nodeId);
+    // bob moves an item he owns into the folder he owns: applies
+    const his = Log.create(alice, childState(p2.nodeId, { kind: "page", shares: [share(bob, "owner")] }), [
+      p2.dep(),
+      r.dep(),
+    ]);
+    expect(placed(into(bob, his, secret)).parentId).toBe(secret.nodeId);
+
+    // inside the folder: an editor's move within it, and out of it into the open, take editor as before
+    const there = Log.create(alice, childState(secret.nodeId, { kind: "page", shares: [share(dan, "editor")] }), [
+      secret.dep(),
+      p1.dep(),
+      r.dep(),
+    ]);
+    const danIn = Log.create(alice, childState(secret.nodeId, { shares: [share(dan, "editor")] }), [
+      secret.dep(),
+      p1.dep(),
+      r.dep(),
+    ]);
+    const within = new Log(there.nodeId);
+    within.entries = [...there.entries];
+    within.add(dan, childState(danIn.nodeId, { kind: "page", shares: [share(dan, "editor")] }), [
+      danIn.dep(),
+      secret.dep(),
+      p1.dep(),
+      r.dep(),
+    ]);
+    const w = world([r, p1, p2, chan, secret, inner, danIn, within]);
+    expect(st(w, there.nodeId).state.parentId).toBe(danIn.nodeId);
+    expect(placed(into(bob, inner, p2)).parentId).toBe(p2.nodeId);
+  });
+
   it("unrestricting needs owner on the node and editor on the parent", () => {
     const { r, p1 } = workspace();
     const p = Log.create(alice, childState(p1.nodeId, { shares: [share(dan, "editor")] }), [p1.dep(), r.dep()]);

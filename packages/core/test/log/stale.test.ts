@@ -357,7 +357,7 @@ describe("stale versions (§5.2)", () => {
     const q = Log.create(alice, childState(r.nodeId, { kind: "folder" }), [r.dep()]);
     const n = Log.create(alice, childState(p.nodeId), [p.dep(), r.dep()]);
     const m = Log.create(alice, childState(p.nodeId), [p.dep(), r.dep()]);
-    n.add(bob, childState(z.nodeId), [p.dep(), z.dep(), r.dep()]);
+    n.add(alice, childState(z.nodeId), [p.dep(), z.dep(), r.dep()]);
     m.add(bob, childState(q.nodeId), [p.dep(), q.dep(), r.dep()]);
     const w = world([r, z, p, q, n, m]);
     expect(st(w, n.nodeId).state.parentId).toBe(z.nodeId);

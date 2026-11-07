@@ -86,8 +86,9 @@ export type StretchRemovals = {
 /**
  * The client's verified view of team groups, from the team's signed group versions. Every answer,
  * `removedAt` and `removedSince` included, must come from the same verified versions as `latest` and
- * `member`: a removal one of them shows and another doesn't would void a share without making the node
- * stale, or the other way round.
+ * `member`. Neither removal answer may hide behind history the client wasn't shown (the server picks what
+ * it serves): unknown history counts as a possible removal, so a removal `latest` shows always makes the
+ * node stale, and a share is never void without `removedSince` being true from the key's version.
  */
 export type GroupView = {
   latest(groupId: string): { version: number; head: B64 } | null;
@@ -95,13 +96,16 @@ export type GroupView = {
   /**
    * The first signed group version greater than `after` at which the user is no longer a member (they
    * were one at the version before it), or null if there is none at or below `latest`. People who were
-   * never members are never "no longer" members, so this is null for them.
+   * never members are never "no longer" members, so this is null for them. Someone gone at `latest` whose
+   * removal a gap hides counts from the earliest version above `after` it could be: after the last version
+   * shown with them in it, or right after `after` when that version isn't shown at all (§4.2).
    */
   removedAt(groupId: string, userId: string, after: number): number | null;
   /**
-   * Whether anyone who was a member at signed group version `version` is no longer one at `latest`
-   * (§5.2: a node sharing with the group, or below an ancestor that does, is stale). False for a group
-   * the client has no verified view of, or a version it doesn't know.
+   * Whether anyone who was a member at signed group version `version` may no longer be one at `latest`
+   * (§5.2: a node sharing with the group, or below an ancestor that does, is stale). A group moves to its
+   * next version only after a removal, so this is true for every version below `latest`, whatever history
+   * was shown; false at or above `latest` and for a group the client has no verified view of.
    */
   removedSince(groupId: string, version: number): boolean;
   teamGroups(teamId: string): { everyone: string; admins: string } | null;

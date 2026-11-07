@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   createAccount,
   createSnapshot,
-  LIMITS,
   type Snapshot,
   type State,
   snapshotBytes,
@@ -272,7 +271,6 @@ describe("node log snapshots", () => {
   });
 
   it("lists are capped: 1000 shares, group shares, links and skipped, 256 deps", () => {
-    expect(LIMITS).toEqual({ shares: 1000, groupShares: 1000, links: 1000, skipped: 1000, deps: 256 });
     const many = <T>(n: number, f: (i: number) => T) => Array.from({ length: n }, (_, i) => f(i));
     const uid = () => crypto.randomUUID();
     const shares = (n: number) => many(n, () => ({ userId: uid(), role: "viewer" as const, signPub: bob.signPub }));

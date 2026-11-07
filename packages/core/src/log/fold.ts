@@ -538,6 +538,10 @@ function judgeDiffs(
     const n = needs(d);
     if (n === null) return SKIP;
     if (min !== null && ROLE_RANK[n] > ROLE_RANK[min]) min = n;
+    // A move into a restricted area the node wasn't in swaps every role it inherits for the area's: removing
+    // people and granting owner, so it needs owner on the node, as a restrict does (§3.2, §5.3).
+    if (d.kind === "move" && min !== null && entersRestricted(world, view, ns.nodeId, e.state, d.from, d.to))
+      min = "owner";
     // A move, and unrestricting below a parent, also need editor on that parent, in the same root (§3.2, §5.3).
     const place =
       d.kind === "move"
@@ -556,6 +560,35 @@ function judgeDiffs(
   if (stale) return unchecked(stale);
   if (!enough) return unchecked(partial as string);
   return elsewhere ? unchecked(elsewhere) : { kind: "apply", diffs, by: "author", viaChain };
+}
+
+/**
+ * The restricted area a chain ends in: its nearest restricted node, null when it reaches the root with none, or
+ * undefined when it stops short of both (a gap in the logs named).
+ */
+function areaOf(chain: { ids: string[]; states: State[] }): string | null | undefined {
+  const last = chain.states.at(-1);
+  if (last === undefined) return undefined;
+  if (last.restricted) return chain.ids.at(-1);
+  return last.parentId === null ? null : undefined;
+}
+
+/**
+ * Whether moving the (open) node from `from` to `to` takes it into a restricted area it wasn't in, read in the
+ * snapshot's view. One the view can't tell counts as entering: the move then needs owner, never less.
+ */
+function entersRestricted(
+  world: LogWorld,
+  view: View,
+  nodeId: string,
+  next: State,
+  from: string | null,
+  to: string | null,
+): boolean {
+  if (next.restricted || to === null) return false;
+  const into = areaOf(chainOf(world, view, nodeId, to));
+  if (into === null) return false;
+  return into === undefined || into !== areaOf(chainOf(world, view, nodeId, from));
 }
 
 /**
