@@ -1,5 +1,66 @@
 import { describe, expect, it } from "vitest";
-import { checkPin, normalizeHandle, pin, validateAddressHandle, validateHandle } from "../src/index.ts";
+import {
+  backfillHandle,
+  checkIdentity,
+  checkPin,
+  normalizeHandle,
+  pin,
+  pinnedUserOfHandle,
+  shownHandle,
+  validateAddressHandle,
+  validateHandle,
+} from "../src/index.ts";
+
+describe("pins bind the handle (one account per handle, one handle per account)", () => {
+  const empty = { pinnedKeys: {}, settings: {} };
+  const alice = { userId: "uA", handle: "alice", signPub: "kA" };
+
+  it("records the handle when pinning and keeps it when the key moves", () => {
+    const d = pin(empty, "uA", "kA", false, "alice");
+    expect(d.pinnedKeys.uA).toEqual({ signPub: "kA", verified: false, handle: "alice" });
+    expect(pin(d, "uA", "kA2", true).pinnedKeys.uA).toEqual({
+      signPub: "kA2",
+      verified: true,
+      earlier: ["kA"],
+      handle: "alice",
+    });
+    // A pin's handle never moves: a later, different one is ignored here (checkIdentity refuses it).
+    expect(pin(d, "uA", "kA", false, "mallory").pinnedKeys.uA?.handle).toBe("alice");
+  });
+
+  it("checkIdentity: new, match, and mismatch on key, handle or a handle pinned to someone else", () => {
+    expect(checkIdentity(empty, alice)).toBe("new");
+    const d = pin(empty, "uA", "kA", false, "alice");
+    expect(checkIdentity(d, alice)).toBe("match");
+    expect(checkIdentity(d, { ...alice, handle: "ALICE" })).toBe("match");
+    expect(checkIdentity(d, { ...alice, signPub: "kX" })).toBe("mismatch");
+    // The pinned account under another handle.
+    expect(checkIdentity(d, { ...alice, handle: "bob" })).toBe("mismatch");
+    // Another account (even one never seen) under the pinned handle.
+    expect(checkIdentity(d, { userId: "uX", handle: "alice", signPub: "kX" })).toBe("mismatch");
+    expect(pinnedUserOfHandle(d, "Alice")).toBe("uA");
+    expect(pinnedUserOfHandle(d, "bob")).toBeUndefined();
+    // What is shown: the pinned handle; another account never under a pinned one.
+    expect(shownHandle(d, "uA", "mallory")).toBe("alice");
+    expect(shownHandle(d, "uX", "alice")).toBeUndefined();
+    expect(shownHandle(d, "uX", "xavier")).toBe("xavier");
+    expect(shownHandle(d, "uX", undefined)).toBeUndefined();
+  });
+
+  it("a pin without a handle (older data) matches on the key and takes the handle on first sight", () => {
+    const old = pin(empty, "uA", "kA", true);
+    expect(checkIdentity(old, alice)).toBe("match");
+    const filled = backfillHandle(old, alice);
+    expect(filled.pinnedKeys.uA).toEqual({ signPub: "kA", verified: true, handle: "alice" });
+    // Nothing to fill: the same object back.
+    expect(backfillHandle(filled, alice)).toBe(filled);
+    expect(backfillHandle(old, { ...alice, signPub: "kX" })).toBe(old);
+    // A handle another pin already carries is never filled in.
+    const both = pin(old, "uB", "kB", false, "alice");
+    expect(backfillHandle(both, alice)).toBe(both);
+    expect(checkIdentity(both, alice)).toBe("mismatch");
+  });
+});
 
 describe("pins", () => {
   const empty = { pinnedKeys: {}, settings: {} };

@@ -15,7 +15,11 @@ import { authorityDeps, LogWorld } from "./world.ts";
  * plus one; for a checkpoint the stretch's floor plus one, §8.1), its commit (`commitOf`, accept.ts), and
  * the members the server reports deleted, left in the state but not sealed to (§5.5).
  */
-export type RekeyInput = { version: number; keyCommit: B64; skipped?: string[] };
+/**
+ * A re-key's version and commit; `skipped`, deleted accounts kept without a seal (§5.5); `dropLinks`, share links the
+ * re-key turns off with it (a removal's or a demotion's: their secrets were readable under the old key).
+ */
+export type RekeyInput = { version: number; keyCommit: B64; skipped?: string[]; dropLinks?: string[] };
 
 /** What a client asks of a node (§3.6); never a state it holds. */
 export type Intent =
@@ -132,6 +136,10 @@ export function applyIntent(world: LogWorld, ns: NodeState, intent: Intent, auth
     const r = stepKey(next, s.version, rekey);
     if (typeof r === "string") return no(r);
     next = r;
+    if (rekey.dropLinks?.length) {
+      const drop = new Set(rekey.dropLinks);
+      next.links = next.links.filter((x) => !drop.has(x.linkId));
+    }
   }
   const shareOf = (userId: string) => next.shares.find((x) => x.userId === userId);
   if ("add" in intent) {

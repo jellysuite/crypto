@@ -16,6 +16,10 @@ export const TAG = {
   chatEntry: "jelly/chat-entry@1",
   chatKeyHistory: "jelly/chat-key-history@1",
   chatAwareness: "jelly/chat-awareness@1",
+  /** A comment on a page, under the page's node key; the AD binds page, key version and comment id. */
+  pageComment: "jelly/page-comment@1",
+  /** A page's previous key (and its version), sealed under the new one at a re-key, so comments stay readable. */
+  pageKeyHistory: "jelly/page-key-history@1",
   /** The device's chat search index (sealed with the device key, never leaves the device). */
   chatSearch: "jelly/chat-search@1",
   /** The device's task search index per workspace (sealed with the device key, never leaves the device). */
@@ -67,6 +71,8 @@ export const SIG = {
   teamInvite: "team-invite@1",
   inviteAccept: "invite-accept@1",
   chatEntry: "chat-entry@1",
+  /** A comment on a page, signed by its author. */
+  pageComment: "page-comment@1",
   /** A call participant's statement of who they are and which tracks are theirs. */
   callHello: "call-hello@1",
   /** One in-call signal, signed with the per-join key its sender's hello announced. */

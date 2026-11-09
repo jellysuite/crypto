@@ -23,9 +23,11 @@ import type { AccountBundle, B64, PublicIdentity } from "./wire.ts";
 
 /**
  * A contact's pinned signing key. `earlier` holds every key this account pinned for them before, oldest first
- * (spec §6.1: pins keep their history), so what they signed under an older key still resolves to them.
+ * (spec §6.1: pins keep their history), so what they signed under an older key still resolves to them. `handle`
+ * (normalized) is the handle seen when the pin was made, or on the first sight after (pins from before it was
+ * kept have none): handles never change or move to another account, so a different one is refused like a key.
  */
-export type PinnedKey = { signPub: B64; verified: boolean; earlier?: B64[] };
+export type PinnedKey = { signPub: B64; verified: boolean; earlier?: B64[]; handle?: string };
 /** A contact's pinned OpenPGP public key (armored) and where we first got it. */
 export type PgpContact = {
   fingerprint: string;

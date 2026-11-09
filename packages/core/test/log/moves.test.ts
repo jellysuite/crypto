@@ -361,6 +361,46 @@ describe("moves, roots and cycles", () => {
     expect(placed(into(bob, inner, p2)).parentId).toBe(p2.nodeId);
   });
 
+  it("a move that would make the mover owner of the node needs owner on it already (open area too)", () => {
+    const { r, p1, p2 } = workspace();
+    // an open folder in p1 alice shares with bob as owner
+    const mine = Log.create(alice, childState(p1.nodeId, { shares: [share(bob, "owner")] }), [p1.dep(), r.dep()]);
+    const into = (by: U, node: Log, to: Log) => {
+      const l = new Log(node.nodeId);
+      l.entries = [...node.entries];
+      const deps = new Map<string, Dep>();
+      for (const d of [
+        ...authorityDeps(world([r, p1, p2, mine, node]), node.nodeId),
+        ...authorityDeps(world([r, p1, p2, mine]), to.nodeId),
+        to.dep(),
+      ])
+        deps.set(d.log, d);
+      l.add(by, { ...node.last().state, parentId: to.nodeId }, [...deps.values()]);
+      return l;
+    };
+    const placed = (l: Log) => {
+      const w = world([r, p1, p2, mine, l]);
+      const ns = st(w, l.nodeId);
+      expect(ns.status).toEqual(verified);
+      return { parentId: ns.state.parentId, w };
+    };
+    // alice's page in p2: bob edits it through the root
+    const page = Log.create(alice, childState(p2.nodeId, { kind: "page" }), [p2.dep(), r.dep()]);
+    const { parentId, w } = placed(into(bob, page, mine));
+    expect(parentId).toBe(p2.nodeId);
+    expect(w.role(bob.id, page.nodeId)).toBe("editor");
+    // alice, owner on it, may
+    expect(placed(into(alice, page, mine)).parentId).toBe(mine.nodeId);
+    // bob, already owner of the item, may
+    const his = Log.create(alice, childState(p2.nodeId, { kind: "page", shares: [share(bob, "owner")] }), [
+      p2.dep(),
+      r.dep(),
+    ]);
+    expect(placed(into(bob, his, mine)).parentId).toBe(mine.nodeId);
+    // a move that doesn't raise bob's role (editor here, editor there) still takes editor
+    expect(placed(into(bob, page, p1)).parentId).toBe(p1.nodeId);
+  });
+
   it("unrestricting needs owner on the node and editor on the parent", () => {
     const { r, p1 } = workspace();
     const p = Log.create(alice, childState(p1.nodeId, { shares: [share(dan, "editor")] }), [p1.dep(), r.dep()]);

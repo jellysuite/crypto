@@ -274,6 +274,11 @@ export type LinkInfo = {
   status: LinkStatus;
   /** Why it's paused or blocked, as the owner should read it. */
   statusReason?: string;
+  /**
+   * Only with `?lapsed=1`: the server turned this link off on its own (its maker left the team or a group) and it
+   * opens nothing, but the item's signed state may still name it, so the next re-key leaves it out.
+   */
+  lapsed?: true;
 };
 export type AbuseReason = "csam" | "terrorism" | "illegal" | "copyright" | "malware" | "harassment" | "other";
 /** A reviewer's public key; reports are sealed to each so the server can't read them. */
@@ -663,6 +668,44 @@ export type ChatReadRes = { lastReadSeq: number };
 /** `envelope` wraps version `keyVersion - 1`'s key under version `keyVersion`'s. */
 export type ChatKeyHistoryRes = { history: Array<{ keyVersion: number; envelope: B64 }> };
 
+// ---- Page comments ----
+
+/** A page comment as the server stores it: thread and resolution in the clear, the rest sealed and signed. */
+export type CommentWire = {
+  id: string;
+  nodeId: string;
+  seq: number;
+  /** Null for a thread's first comment. */
+  threadRoot: string | null;
+  keyVersion: number;
+  /** Null once deleted. */
+  envelope: B64 | null;
+  signature: B64 | null;
+  authorId: string;
+  createdAt: string;
+  editedAt: string | null;
+  deletedAt: string | null;
+  /** Thread starts only: the server's word on who resolved it, and when. */
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+};
+/** `envelope` seals `{ version, key }` (the key before version `keyVersion`) under version `keyVersion`'s key. */
+export type PageKeyHistoryEntry = { keyVersion: number; envelope: B64 };
+export type CommentsRes = { comments: CommentWire[]; keyHistory: PageKeyHistoryEntry[] };
+export type PostCommentReq = {
+  id: string;
+  threadRoot?: string | null;
+  keyVersion: number;
+  envelope: B64;
+  signature: B64;
+  /** Who the comment mentions, in plain, so the server can tell them (spec §3). */
+  mentions: string[];
+};
+export type EditCommentReq = { keyVersion: number; envelope: B64; signature: B64; mentions: string[] };
+export type CommentRes = { comment: CommentWire };
+export type CommentMention = { comment: CommentWire; nodeId: string; createdAt: string };
+export type CommentMentionsRes = { mentions: CommentMention[] };
+
 // ---- Tasks ----
 
 /**
@@ -831,7 +874,15 @@ export type PushConfigRes = { enabled: boolean };
  * `keySig`: the account's signature over the push key as registered (null on rows from before 0.4.1); writers seal
  * only to devices whose signature verifies against the account's own signing key (`verifyPushDevice`).
  */
-export type PushDeviceWire = { id: string; publicKey: string; keySig: string | null; mail: boolean; createdAt: string };
+export type PushDeviceWire = {
+  id: string;
+  publicKey: string;
+  keySig: string | null;
+  mail: boolean;
+  /** Chat mentions and DMs are pushed to it (the iOS app). */
+  chat: boolean;
+  createdAt: string;
+};
 /**
  * `POST /push/devices`: the APNs device token (hex), and the install's X25519 push public key (base64url). `mail`
  * also pushes new mail to it (off when left out). `keySig`: `signPushDevice` over the push key (base64url, 64 bytes).
@@ -842,9 +893,11 @@ export type AddPushDeviceReq = {
   publicKey: string;
   keySig?: string;
   mail?: boolean;
+  /** Also push chat mentions and DMs (off when left out). */
+  chat?: boolean;
 };
-/** `PATCH /push/devices/:id`: switches new-mail pushes. */
-export type PatchPushDeviceReq = { mail: boolean };
+/** `PATCH /push/devices/:id`: switches new-mail and chat pushes (either or both). */
+export type PatchPushDeviceReq = { mail?: boolean; chat?: boolean };
 export type AddPushDeviceRes = { id: string };
 /** A reminder at `at` (ISO): `sealed` maps a push device id to the text sealed to it (base64url). */
 export type PushReminderWire = { key: string; at: string; sealed: Record<string, string> };
@@ -853,6 +906,16 @@ export type PushReminderWire = { key: string; at: string; sealed: Record<string,
  * `updatedAt` as received, or a task project's highest applied update seq (a decimal string).
  */
 export type PutPushRemindersReq = { version: string; reminders: PushReminderWire[] };
+
+// Notices one person's app seals for another's phones (docs/superpowers/specs/2026-11-09-chat-mention-push-design.md).
+
+/** One of someone else's push devices, as listed for a sender: verify `keySig` before sealing (`sealNoticesFor`). */
+export type PushNoticeDeviceWire = { id: string; publicKey: string; keySig: string | null };
+/** `GET /chat/channels/:id/push-devices?users=…`: the named people's devices, for those who can read the channel. */
+export type PushNoticeDevicesRes = { users: Array<{ userId: string; devices: PushNoticeDeviceWire[] }> };
+/** `POST /chat/entries/:id/pushes`: per person, device id → the notice sealed to it (base64url). */
+export type PostPushNoticesReq = { pushes: Array<{ userId: string; sealed: Record<string, string> }> };
+export type PostPushNoticesRes = { queued: number };
 
 /** A disposable receiving address (<label>.<random>@<mail domain>) delivering into the owner's mailbox. */
 export type MailAliasWire = {

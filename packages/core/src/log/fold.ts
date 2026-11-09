@@ -487,7 +487,8 @@ function judgeIn(world: LogWorld, f: Fold, e: LogEntry): Verdict {
   const couldBe = leave || atLeast(role, "editor") || partial !== null;
   const viaChain = !atLeast(ownAuthorityIn(here, e.authorId), "editor");
 
-  const decide = (ds: Diff[]) => judgeDiffs(world, f, e, ds, view, role, partial, viaChain);
+  const own = ownAuthorityIn(here, e.authorId);
+  const decide = (ds: Diff[]) => judgeDiffs(world, f, e, ds, view, role, own, partial, viaChain);
   if (diffs.some((d) => mayDrop(d) || d.kind === "move" || d.kind === "restrict" || d.kind === "unrestrict")) {
     // What the snapshot leaves out that has lapsed or is void in the "lapse" view isn't a change. Lifting a
     // restriction takes its anchors with it: an owner share only the restriction vouched for is lapsed in the
@@ -521,6 +522,7 @@ function judgeDiffs(
   diffs: Diff[],
   view: View,
   role: Role | null,
+  own: Role | null,
   partial: string | null,
   viaChain: boolean,
 ): Verdict {
@@ -541,6 +543,10 @@ function judgeDiffs(
     // A move into a restricted area the node wasn't in swaps every role it inherits for the area's: removing
     // people and granting owner, so it needs owner on the node, as a restrict does (§3.2, §5.3).
     if (d.kind === "move" && min !== null && entersRestricted(world, view, ns.nodeId, e.state, d.from, d.to))
+      min = "owner";
+    // Nor may a move raise the mover's own role on the node (an editor placing it under a folder they own, and
+    // so becoming its owner, who could then restrict it and cut its owners off): that takes owner on it (§5.3).
+    if (d.kind === "move" && min !== null && raisesRole(world, view, ns.nodeId, e.state, d.to, e.authorId, own, role))
       min = "owner";
     // A move, and unrestricting below a parent, also need editor on that parent, in the same root (§3.2, §5.3).
     const place =
@@ -589,6 +595,30 @@ function entersRestricted(
   const into = areaOf(chainOf(world, view, nodeId, to));
   if (into === null) return false;
   return into === undefined || into !== areaOf(chainOf(world, view, nodeId, from));
+}
+
+const rankOf = (r: Role | null): number => (r === null ? -1 : ROLE_RANK[r]);
+
+/**
+ * Whether moving the (open) node under `to` gives `author` a higher role on it than `before` (their role where it
+ * is), read in the snapshot's view: their own role on it with the new parent's chain. A chain the view leaves
+ * short counts as raising, as it counts as entering a restricted area.
+ */
+function raisesRole(
+  world: LogWorld,
+  view: View,
+  nodeId: string,
+  next: State,
+  to: string | null,
+  author: string,
+  own: Role | null,
+  before: Role | null,
+): boolean {
+  if (next.restricted || to === null || before === "owner") return false;
+  const chain = chainOf(world, view, nodeId, to);
+  if (areaOf(chain) === undefined) return true;
+  const via = chainRole(chain, author);
+  return Math.max(rankOf(own), rankOf(via)) > rankOf(before);
 }
 
 /**

@@ -1,6 +1,7 @@
 export * from "./account.ts";
 export * from "./address-tags.ts";
 export type * from "./api.ts";
+export * from "./comments.ts";
 export * from "./device-index.ts";
 export * from "./grants.ts";
 export * from "./handles.ts";

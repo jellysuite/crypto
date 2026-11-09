@@ -702,11 +702,11 @@ describe("deps name the whole stretch up to the role (§4.4)", () => {
 });
 
 describe("an unnamed place is a gap (§4.4)", () => {
-  /** alice's root r with folders P (bob editor) and X (bob owner); n under P, which bob moves into X naming everything. */
+  /** alice's root r with folders P and X (bob editor on both); n under P, which bob moves into X naming everything. */
   const movedByBob = (nShares: ReturnType<typeof share>[] = []) => {
     const r = Log.create(alice, rootState());
     const P = Log.create(alice, childState(r.nodeId, { kind: "folder", shares: [share(bob, "editor")] }), [r.dep()]);
-    const X = Log.create(alice, childState(r.nodeId, { kind: "folder", shares: [share(bob, "owner")] }), [r.dep()]);
+    const X = Log.create(alice, childState(r.nodeId, { kind: "folder", shares: [share(bob, "editor")] }), [r.dep()]);
     const n = Log.create(alice, childState(P.nodeId, { shares: nShares }), [P.dep(), r.dep()]);
     n.add(bob, childState(X.nodeId, { shares: nShares }), [P.dep(), X.dep(), r.dep()]);
     expect(st(world([r, P, X, n]), n.nodeId).state.parentId).toBe(X.nodeId);
@@ -1002,13 +1002,13 @@ describe("a restriction the deps can't judge stands (§4.4)", () => {
     // bob's lapsed move (as in the gap tests); he names X at a seq the client wasn't shown
     const r = Log.create(alice, rootState());
     const P = Log.create(alice, childState(r.nodeId, { kind: "folder", shares: [share(bob, "editor")] }), [r.dep()]);
-    const X = Log.create(alice, childState(r.nodeId, { kind: "folder", shares: [share(bob, "owner")] }), [r.dep()]);
+    const X = Log.create(alice, childState(r.nodeId, { kind: "folder", shares: [share(bob, "editor")] }), [r.dep()]);
     const n = Log.create(alice, childState(P.nodeId), [P.dep(), r.dep()]);
     n.add(bob, childState(X.nodeId), [P.dep(), X.dep(), r.dep()]);
     P.add(alice, childState(r.nodeId, { kind: "folder", version: 2, keyCommit: commit(2) }), [r.dep()]);
     const newer = X.add(
       alice,
-      childState(r.nodeId, { kind: "folder", shares: [share(bob, "owner")], version: 2, keyCommit: commit(2) }),
+      childState(r.nodeId, { kind: "folder", shares: [share(bob, "editor")], version: 2, keyCommit: commit(2) }),
       [r.dep()],
     ).dep();
     X.entries.pop();
