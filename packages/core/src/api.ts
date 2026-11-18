@@ -18,7 +18,7 @@ import type { AccountBundle, B64, PublicIdentity, Role } from "./wire.ts";
 
 export type ApiErrorBody = { error: string; message: string };
 
-export type RegisterStartReq = { handle: string; registrationRequest: string };
+export type RegisterStartReq = { handle: string; registrationRequest: string; bootstrap?: string };
 export type RegisterStartRes = { registrationResponse: string };
 export type RegisterFinishReq = {
   userId: string;
@@ -32,6 +32,8 @@ export type RegisterFinishReq = {
   workspace: { id: string; rootNodeId: string; rootMeta: B64; rootGrant: Grant; rootSnapshot: Snapshot };
   /** The paid checkout session that pays for the account; required when the server has billing on. */
   checkout?: string;
+  /** The one-time bootstrap token that lets the first account sign up on a closed server (also sent at register/start). */
+  bootstrap?: string;
 };
 export type SessionRes = { token: string; userId: string };
 
